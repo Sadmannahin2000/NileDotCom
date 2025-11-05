@@ -1,0 +1,370 @@
+package view;
+
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.*;
+import java.io.*;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.List;
+import java.util.ArrayList;
+import model.InventoryItem;
+import model.InventoryManager;
+
+/*
+ Name: Sadman Nahin
+ Course: CNT 4714 – Summer 2025
+ Assignment title: Project 1 – An Event-driven Enterprise Simulation
+ Date: Sunday June 1, 2025
+*/
+public class MainGUI extends JFrame {
+    private JLabel lblItemNumber, lblQuantity, lblSubtotal;
+    private JTextField txtItemNumber, txtQuantity;
+    private JButton btnFindItem, btnAddToCart, btnDeleteLast, btnCheckout, btnNewOrder, btnQuit;
+    private JTextArea txtItemInfo, txtCartContents;
+    private InventoryManager invMgr;
+
+    // shopping cart
+    private List<CartLine> cartList = new ArrayList<>();
+    private int currentItemCount = 1;
+    private double runningSubtotal = 0.0;
+
+    // Inner class representing
+    private static class CartLine {
+        String itemId, description;
+        int quantity;
+        double unitPrice, discountRate, lineTotal;
+
+        CartLine(String itemId, String description, int quantity,
+                 double unitPrice, double discountRate, double lineTotal) {
+            this.itemId = itemId;
+            this.description = description;
+            this.quantity = quantity;
+            this.unitPrice = unitPrice;
+            this.discountRate = discountRate;
+            this.lineTotal = lineTotal;
+        }
+    }
+
+    public MainGUI(InventoryManager invMgr) {
+        super("Nile Dot Com – E-Store Simulation");
+        this.invMgr = invMgr;
+        setLayout(new BorderLayout(10, 10));
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+
+        // ── Top Panel (Item #, Quantity, Search button) ───────────────────────────────
+        JPanel topPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        lblItemNumber = new JLabel("Item #");
+        txtItemNumber = new JTextField(8);
+        lblQuantity = new JLabel("Quantity");
+        txtQuantity = new JTextField(4);
+        btnFindItem = new JButton("Search For Item #1");
+
+        btnFindItem.addActionListener(e -> {
+            String itemId = txtItemNumber.getText().trim();
+            String qtyText = txtQuantity.getText().trim();
+            if (itemId.isEmpty() || qtyText.isEmpty()) {
+                JOptionPane.showMessageDialog(
+                        MainGUI.this,
+                        "Please enter both an item number and a quantity."
+                );
+                return;
+            }
+            int quantityRequested;
+            try {
+                quantityRequested = Integer.parseInt(qtyText);
+                if (quantityRequested <= 0) throw new NumberFormatException();
+            } catch (NumberFormatException ex) {
+                JOptionPane.showMessageDialog(
+                        MainGUI.this,
+                        "Quantity must be a positive integer."
+                );
+                return;
+            }
+
+            InventoryItem item = invMgr.findItemById(itemId);
+            if (item == null) {
+                JOptionPane.showMessageDialog(
+                        MainGUI.this,
+                        "Item \"" + itemId + "\" not found in inventory."
+                );
+                return;
+            }
+            if (!item.getInStockStatus().equalsIgnoreCase("InStock")) {
+                JOptionPane.showMessageDialog(
+                        MainGUI.this,
+                        "Item \"" + itemId + "\" is currently out of stock."
+                );
+                txtItemNumber.setText("");
+                txtQuantity.setText("");
+                return;
+            }
+            if (quantityRequested > item.getQuantityOnHand()) {
+                JOptionPane.showMessageDialog(
+                        MainGUI.this,
+                        "Only " + item.getQuantityOnHand() +
+                                " units available. Please enter a smaller quantity."
+                );
+                txtQuantity.setText("");
+                return;
+            }
+
+            // Display item info
+            txtItemInfo.setText(
+                    "Item #: " + item.getItemId() +
+                            "\nDescription: " + item.getDescription() +
+                            "\nStatus: " + item.getInStockStatus() +
+                            "\nQty Available: " + item.getQuantityOnHand() +
+                            "\nUnit Price: $" + String.format("%.2f", item.getUnitPrice()) +
+                            "\nQuantity Requested: " + quantityRequested
+            );
+
+            btnAddToCart.setEnabled(true);
+            btnFindItem.setEnabled(false);
+        });
+
+        topPanel.add(lblItemNumber);
+        topPanel.add(txtItemNumber);
+        topPanel.add(lblQuantity);
+        topPanel.add(txtQuantity);
+        topPanel.add(btnFindItem);
+        add(topPanel, BorderLayout.NORTH);
+
+        // ── Center Panel  ────────────────────────────────────
+        txtItemInfo = new JTextArea(6, 30);
+        txtItemInfo.setEditable(false);
+        txtCartContents = new JTextArea(10, 30);
+        txtCartContents.setEditable(false);
+
+        JPanel centerPanel = new JPanel(new GridLayout(1, 2, 10, 10));
+        centerPanel.add(new JScrollPane(txtItemInfo));
+        centerPanel.add(new JScrollPane(txtCartContents));
+        add(centerPanel, BorderLayout.CENTER);
+
+        // ── Bottom Panel  ───────────────────────────────────────────
+        JPanel bottomPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        btnAddToCart = new JButton("Add Item #1 To Cart");
+        btnDeleteLast = new JButton("Delete Last Item Added To Cart");
+        btnCheckout = new JButton("Check Out");
+        btnNewOrder = new JButton("New Order");
+        btnQuit = new JButton("Quit!");
+        lblSubtotal = new JLabel("Subtotal: $0.00");
+
+        // Add to Cart” action listener
+        btnAddToCart.addActionListener(evt -> {
+            // Parse the lines from txtItemInfo
+            String[] lines = txtItemInfo.getText().split("\n");
+            String itemId = lines[0].split(": ")[1];
+            String description = lines[1].split(": ")[1];
+            int qtyRequested = Integer.parseInt(lines[5].split(": ")[1]);
+            double unitPrice = Double.parseDouble(lines[4].split("\\$")[1]);
+
+            // Calculate discount
+            double discountRate = 0.0;
+            if (qtyRequested >= 5 && qtyRequested <= 9) discountRate = 0.10;
+            else if (qtyRequested >= 10 && qtyRequested <= 14) discountRate = 0.15;
+            else if (qtyRequested >= 15) discountRate = 0.20;
+            double lineTotal = qtyRequested * unitPrice * (1.0 - discountRate);
+
+            // Add to in‐memory cart
+            CartLine cl = new CartLine(itemId, description, qtyRequested,
+                    unitPrice, discountRate, lineTotal);
+            cartList.add(cl);
+
+            // Deduct from inventoryMap
+            InventoryItem invItem = invMgr.findItemById(itemId);
+            invMgr.updateQuantity(itemId, invItem.getQuantityOnHand() - qtyRequested);
+
+            // Re‐render cart contents
+            StringBuilder cartText = new StringBuilder();
+            for (int i = 0; i < cartList.size(); i++) {
+                CartLine line = cartList.get(i);
+                cartText.append(String.format(
+                        "%d) %s  %s  Qty: %d  Unit: $%.2f  Disc: %.0f%%  Line: $%.2f\n",
+                        i+1, line.itemId, line.description,
+                        line.quantity, line.unitPrice,
+                        line.discountRate * 100, line.lineTotal
+                ));
+            }
+            txtCartContents.setText(cartText.toString());
+
+            // Update running subtotal
+            runningSubtotal += lineTotal;
+            lblSubtotal.setText("Subtotal: $" + String.format("%.2f", runningSubtotal));
+
+            // Prepare for next item
+            currentItemCount++;
+            btnFindItem.setText("Search For Item #" + currentItemCount);
+            btnAddToCart.setText("Add Item #" + currentItemCount + " To Cart");
+
+            // Clear fields
+            txtItemNumber.setText("");
+            txtQuantity.setText("");
+            txtItemInfo.setText("");
+            btnFindItem.setEnabled(true);
+            btnAddToCart.setEnabled(false);
+
+            btnDeleteLast.setEnabled(true);
+            btnCheckout.setEnabled(true);
+
+            if (currentItemCount > 5) {
+                btnFindItem.setEnabled(false);
+                btnAddToCart.setEnabled(false);
+            }
+        });
+
+        // Delete Last Item” action listener
+        btnDeleteLast.addActionListener(evt -> {
+            if (cartList.isEmpty()) return;
+            CartLine last = cartList.remove(cartList.size() - 1);
+            InventoryItem invItem = invMgr.findItemById(last.itemId);
+            invMgr.updateQuantity(last.itemId, invItem.getQuantityOnHand() + last.quantity);
+
+            runningSubtotal -= last.lineTotal;
+            lblSubtotal.setText("Subtotal: $" + String.format("%.2f", runningSubtotal));
+
+            currentItemCount--;
+            btnFindItem.setText("Search For Item #" + currentItemCount);
+            btnAddToCart.setText("Add Item #" + currentItemCount + " To Cart");
+
+            StringBuilder cartText = new StringBuilder();
+            for (int i = 0; i < cartList.size(); i++) {
+                CartLine line = cartList.get(i);
+                cartText.append(String.format(
+                        "%d) %s  %s  Qty: %d  Unit: $%.2f  Disc: %.0f%%  Line: $%.2f\n",
+                        i+1, line.itemId, line.description,
+                        line.quantity, line.unitPrice,
+                        line.discountRate * 100, line.lineTotal
+                ));
+            }
+            txtCartContents.setText(cartText.toString());
+
+            btnFindItem.setEnabled(true);
+            btnAddToCart.setEnabled(false);
+            if (cartList.isEmpty()) {
+                btnDeleteLast.setEnabled(false);
+                btnCheckout.setEnabled(false);
+            }
+        });
+
+        // Check Out” action listener (writes to transactions.csv with date/time
+        btnCheckout.addActionListener(evt -> {
+            if (cartList.isEmpty()) return;
+
+            // (A) Build and show invoice dialog
+            StringBuilder invoiceSB = new StringBuilder();
+            invoiceSB.append("Invoice:\n\n");
+            for (int i = 0; i < cartList.size(); i++) {
+                CartLine line = cartList.get(i);
+                invoiceSB.append(String.format(
+                        "%d) %s  %s   Qty: %d  Unit: $%.2f  Disc: %.0f%%  Line: $%.2f\n",
+                        i+1, line.itemId, line.description,
+                        line.quantity, line.unitPrice,
+                        line.discountRate * 100, line.lineTotal
+                ));
+            }
+            double tax = runningSubtotal * 0.06;
+            double total = runningSubtotal + tax;
+            invoiceSB.append("\nSubtotal: $" + String.format("%.2f", runningSubtotal));
+            invoiceSB.append("\nTax (6%): $" + String.format("%.2f", tax));
+            invoiceSB.append("\nTotal: $" + String.format("%.2f", total));
+
+            JOptionPane.showMessageDialog(
+                    MainGUI.this,
+                    invoiceSB.toString(),
+                    "Invoice",
+                    JOptionPane.INFORMATION_MESSAGE
+            );
+
+            // (B) Write each cart line to transactions.csv (append mode),
+            //     including both a unique TxnID and a human‐readable date/time.
+
+            // 1) Unique Txn ID: "DDMMYYYYHHMMSS"
+            String txnID = new SimpleDateFormat("ddMMyyyyHHmmss").format(new Date());
+            // 2) Human‐readable timestamp: "DD/MM/YYYY HH:mm:ss"
+            String humanTimestamp = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss").format(new Date());
+
+            BufferedWriter bw = null;
+            try {
+                bw = new BufferedWriter(new FileWriter("transactions.csv", true));
+                for (CartLine line : cartList) {
+                    // CSV format:
+                    // TxnID,DateTime,ItemId,Description,Quantity,UnitPrice,DiscountRate,LineTotal
+                    String row = String.format(
+                            "%s,%s,%s,%s,%d,%.2f,%.2f,%.2f",
+                            txnID,
+                            humanTimestamp.replace(",", ""),  // remove commas if any
+                            line.itemId,
+                            line.description.replace(",", ""),
+                            line.quantity,
+                            line.unitPrice,
+                            line.discountRate,
+                            line.lineTotal
+                    );
+                    bw.write(row);
+                    bw.newLine();
+                }
+                bw.flush();
+            } catch (IOException ioe) {
+                JOptionPane.showMessageDialog(
+                        MainGUI.this,
+                        "Error writing transactions.csv: " + ioe.getMessage(),
+                        "File Write Error",
+                        JOptionPane.ERROR_MESSAGE
+                );
+            } finally {
+                try {
+                    if (bw != null) bw.close();
+                } catch (IOException ignored) { }
+            }
+
+            // (C) After writing, disable the Check Out button so we don’t write a duplicate
+            btnCheckout.setEnabled(false);
+        });
+
+        // ── “New Order” resets everything ─────────────────────────────────────────────────
+        btnNewOrder.addActionListener(evt -> {
+            cartList.clear();
+            currentItemCount = 1;
+            runningSubtotal = 0.0;
+            txtCartContents.setText("");
+            lblSubtotal.setText("Subtotal: $0.00");
+
+            txtItemNumber.setText("");
+            txtQuantity.setText("");
+            txtItemInfo.setText("");
+
+            btnFindItem.setText("Search For Item #1");
+            btnAddToCart.setText("Add Item #1 To Cart");
+            btnFindItem.setEnabled(true);
+            btnAddToCart.setEnabled(false);
+            btnDeleteLast.setEnabled(false);
+            btnCheckout.setEnabled(false);
+        });
+
+        // Quit ───────────────────────────────────────────────────────────
+        btnQuit.addActionListener(evt -> System.exit(0));
+
+        bottomPanel.add(btnAddToCart);
+        bottomPanel.add(btnDeleteLast);
+        bottomPanel.add(btnCheckout);
+        bottomPanel.add(btnNewOrder);
+        bottomPanel.add(btnQuit);
+        bottomPanel.add(lblSubtotal);
+        add(bottomPanel, BorderLayout.SOUTH);
+
+        // Initial states
+        btnAddToCart.setEnabled(false);
+        btnDeleteLast.setEnabled(false);
+        btnCheckout.setEnabled(false);
+
+        pack();
+        setLocationRelativeTo(null);
+        setVisible(true);
+    }
+
+    public static void main(String[] args) {
+        // (Not used in this version; we launch via NileDotComApp)
+        SwingUtilities.invokeLater(() -> { });
+    }
+}
