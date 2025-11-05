@@ -1,0 +1,51 @@
+package model;
+
+/*
+ Name: SadmanNahin
+ Course: CNT 4714 – Summer 2025
+ Assignment title: Project 1 – An Event-driven Enterprise Simulation
+ Date: Sunday June 1, 2025
+*/
+
+public class InventoryItem {
+    private String itemId;
+    private String description;
+    private String inStockStatus;
+    private int quantityOnHand;
+    private double unitPrice;
+
+    public InventoryItem(String itemId, String description, String inStockStatus,
+                         int quantityOnHand, double unitPrice) {
+        this.itemId = itemId;
+        this.description = description;
+        this.inStockStatus = inStockStatus;
+        this.quantityOnHand = quantityOnHand;
+        this.unitPrice = unitPrice;
+    }
+
+    // Getters
+    public String getItemId() {
+        return itemId;
+    }
+
+    public String getDescription() {
+        return description;
+    }
+
+    public String getInStockStatus() {
+        return inStockStatus;
+    }
+
+    public int getQuantityOnHand() {
+        return quantityOnHand;
+    }
+
+    public double getUnitPrice() {
+        return unitPrice;
+    }
+
+    // Setter for quantityOnHand
+    public void setQuantityOnHand(int newQty) {
+        this.quantityOnHand = newQty;
+    }
+}
